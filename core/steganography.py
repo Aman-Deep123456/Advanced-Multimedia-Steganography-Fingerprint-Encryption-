@@ -2,7 +2,10 @@ from PIL import Image
 import numpy as np
 import os
 import struct
-import jpegio
+try:
+    import jpegio
+except ImportError:
+    jpegio = None
 import zlib
 import soundfile as sf
 import hashlib
@@ -69,7 +72,7 @@ def get_file_capacity(file_path, file_type='auto'):
         file_type = detect_file_type(file_path)
     
     if file_type in ['image', 'png', 'jpg', 'jpeg', 'bmp', 'webp']:
-        if file_path.lower().endswith(('.jpg', '.jpeg')):
+        if file_path.lower().endswith(('.jpg', '.jpeg')) and jpegio is not None:
             try:
                 jpeg = jpegio.read(file_path)
                 total_coeffs = 0
@@ -154,6 +157,8 @@ def detect_file_type(file_path):
         return 'binary'
 
 def f5_embed_gpu(cover_path, payload_bytes, output_path, fingerprint_bytes):
+    if jpegio is None:
+        raise ImportError("jpegio is not installed. To install it on Apple Silicon Mac, run: ARCHFLAGS=\"-arch arm64\" pip install jpegio")
     jpeg = jpegio.read(cover_path)
     
     compressed_payload = zlib.compress(payload_bytes, level=9)
@@ -227,6 +232,8 @@ def f5_embed_gpu(cover_path, payload_bytes, output_path, fingerprint_bytes):
     return needed_bits
 
 def f5_extract_gpu(stego_path, fingerprint_bytes):
+    if jpegio is None:
+        raise ImportError("jpegio is not installed. To install it on Apple Silicon Mac, run: ARCHFLAGS=\"-arch arm64\" pip install jpegio")
     jpeg = jpegio.read(stego_path)
     coef_arrays = jpeg.coef_arrays
     
