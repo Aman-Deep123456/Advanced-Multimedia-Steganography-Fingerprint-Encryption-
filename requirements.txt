@@ -6,3 +6,4 @@ scipy
 cryptography
 reedsolo
 torch
+streamlit
