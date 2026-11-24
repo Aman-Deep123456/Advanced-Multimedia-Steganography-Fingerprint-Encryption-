@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CIPHERSTEG // Universal Steganography & Bitcoin Crypto</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cyber: {
+              950: '#060911',
+              900: '#0a0f1d',
+              850: '#0e162a',
+              800: '#141e38',
+              700: '#1e2d54',
+              cyan: '#00f2fe',
+              blue: '#4facfe',
+              purple: '#9d4edd',
+              green: '#00f5a0',
+              red: '#ff0055',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #060911;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+    .glass-panel {
+      background: rgba(14, 22, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .glass-input {
+      background: rgba(10, 15, 29, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: all 0.2s ease;
+    }
+    .glass-input:focus {
+      border-color: #00f2fe;
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.25);
+    }
+    .dropzone {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .dropzone.dragover {
+      border-color: #00f2fe;
+      background: rgba(0, 242, 254, 0.06);
+      transform: scale(1.01);
+    }
+    .cyber-btn {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      transition: all 0.25s ease;
+    }
+    .cyber-btn:hover {
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.45);
+      transform: translateY(-1px);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px rgba(0, 242, 254, 0.15);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0f1d;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e2d54;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00f2fe;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-black">
+
+  <!-- TOP NAVIGATION HEADER -->
+  <header class="border-b border-white/10 glass-panel sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i data-lucide="shield-check" class="w-6 h-6 text-black"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">CIPHERSTEG</span>
+          <span class="ml-2 px-2 py-0.5 text-[10px] font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-800 rounded">v2.4 SECP256K1</span>
+        </div>
+      </div>
+
+      <!-- System status indicator -->
+      <div class="flex items-center space-x-4">
+        <div class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyber-900 border border-white/5 text-xs font-mono">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-gray-400">ENGINE:</span>
+          <span id="device-badge" class="text-emerald-400 font-bold uppercase">MPS ACCELERATED</span>
+        </div>
+        <div class="hidden md:flex items-center space-x-2 text-xs font-mono text-gray-400">
+          <span class="text-cyan-400">ECC:</span> RS-32
+          <span class="text-gray-600">|</span>
+          <span class="text-purple-400">CIPHER:</span> AES-256-GCM
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- TAB NAVIGATION BAR -->
+  <div class="border-b border-white/5 bg-cyber-950/80 sticky top-16 z-40 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav class="flex space-x-2 sm:space-x-4 overflow-x-auto py-2.5 text-xs sm:text-sm font-medium scrollbar-none" id="main-nav">
+        <button data-tab="tab-embed" class="tab-btn active px-4 py-2 rounded-lg flex items-center space-x-2 transition bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold shadow-sm">
+          <i data-lucide="lock" class="w-4 h-4"></i>
+          <span>EMBED / HIDE</span>
+        </button>
+        <button data-tab="tab-extract" class="tab-btn px-4 py-2 rounded-lg flex items-center space-x-2 transition text-gray-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <i data-lucide="unlock" class="w-4 h-4"></i>
+          <span>EXTRACT / DECODE</span>
+        </button>
+        <button data-tab="tab-capacity" class="tab-btn px-4 py-2 rounded-lg flex items-center space-x-2 transition text-gray-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <i data-lucide="gauge" class="w-4 h-4"></i>
+          <span>CAPACITY LAB</span>
+        </button>
+        <button data-tab="tab-merge" class="tab-btn px-4 py-2 rounded-lg flex items-center space-x-2 transition text-gray-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>SPLIT & MERGE</span>
+        </button>
+        <button data-tab="tab-keys" class="tab-btn px-4 py-2 rounded-lg flex items-center space-x-2 transition text-gray-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <i data-lucide="key" class="w-4 h-4"></i>
+          <span>KEY VAULT</span>
+        </button>
+        <button data-tab="tab-sign" class="tab-btn px-4 py-2 rounded-lg flex items-center space-x-2 transition text-gray-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <i data-lucide="pen-tool" class="w-4 h-4"></i>
+          <span>SIGN & VERIFY</span>
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- ======================================================================= -->
+    <!-- TAB 1: EMBED / HIDE -->
+    <!-- ======================================================================= -->
+    <section id="tab-embed" class="tab-content space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/5 gap-2">
+        <div>
+          <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+            <span>Conceal Secret into Carrier Media</span>
+          </h2>
+          <p class="text-sm text-gray-400">Embed arbitrary secret files inside Images (JPEG/PNG), Audio (FLAC/WAV), Video (MP4), or Text.</p>
+        </div>
+        <div class="flex items-center space-x-2 text-xs font-mono text-cyan-400 bg-cyan-950/60 px-3 py-1.5 rounded-lg border border-cyan-800/50">
+          <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+          <span>NON-LINEAR PRNG SCATTER ACTIVE</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Carrier Dropzone -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold tracking-wider text-cyan-400 uppercase flex items-center space-x-1.5">
+              <i data-lucide="image" class="w-4 h-4"></i>
+              <span>1. Select Carrier / Cover File</span>
+            </label>
+            <span id="carrier-stats" class="text-xs font-mono text-gray-400"></span>
+          </div>
+          
+          <div id="dropzone-carrier" class="dropzone border-2 border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer glass-panel relative group hover:border-cyan-500/50">
+            <input type="file" id="input-carrier" class="hidden" accept=".jpg,.jpeg,.png,.bmp,.webp,.wav,.flac,.mp3,.mp4,.avi,.mkv,.txt">
+            <div id="carrier-empty-view" class="py-8 space-y-3">
+              <div class="w-14 h-14 mx-auto rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition duration-300">
+                <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+              </div>
+              <div>
+                <p class="font-medium text-white">Drag & drop carrier or <span class="text-cyan-400 underline">browse</span></p>
+                <p class="text-xs text-gray-500 mt-1">Supports JPEG, PNG, WAV, FLAC, MP4, TXT</p>
+              </div>
+            </div>
+            <div id="carrier-loaded-view" class="hidden text-left space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3 overflow-hidden">
+                  <div class="w-10 h-10 rounded-lg bg-cyan-900/50 flex items-center justify-center text-cyan-400 font-mono text-xs font-bold shrink-0" id="carrier-ext-badge">
+                    JPG
+                  </div>
+                  <div class="truncate">
+                    <p id="carrier-name" class="font-medium text-white truncate text-sm">photo.jpg</p>
+                    <p id="carrier-size" class="text-xs font-mono text-gray-400">2.4 MB</p>
+                  </div>
+                </div>
+                <button type="button" id="btn-remove-carrier" class="text-gray-400 hover:text-rose-400 p-1.5 transition">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+              <div id="carrier-preview-container" class="mt-2 max-h-48 overflow-hidden rounded-lg bg-black/40 flex items-center justify-center">
+                <!-- Image or audio player preview injected here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secret File Dropzone -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold tracking-wider text-purple-400 uppercase flex items-center space-x-1.5">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+              <span>2. Select Secret File to Conceal</span>
+            </label>
+            <span id="secret-stats" class="text-xs font-mono text-gray-400"></span>
+          </div>
+
+          <div id="dropzone-secret" class="dropzone border-2 border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer glass-panel relative group hover:border-purple-500/50">
+            <input type="file" id="input-secret" class="hidden">
+            <div id="secret-empty-view" class="py-8 space-y-3">
+              <div class="w-14 h-14 mx-auto rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover:scale-110 transition duration-300">
+                <i data-lucide="file-plus" class="w-7 h-7"></i>
+              </div>
+              <div>
+                <p class="font-medium text-white">Drag & drop secret file or <span class="text-purple-400 underline">browse</span></p>
+                <p class="text-xs text-gray-500 mt-1">Any format: PDF, DOCX, ZIP, TXT, Binaries</p>
+              </div>
+            </div>
+            <div id="secret-loaded-view" class="hidden text-left space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3 overflow-hidden">
+                  <div class="w-10 h-10 rounded-lg bg-purple-900/50 flex items-center justify-center text-purple-400 font-mono text-xs font-bold shrink-0" id="secret-ext-badge">
+                    PDF
+                  </div>
+                  <div class="truncate">
+                    <p id="secret-name" class="font-medium text-white truncate text-sm">confidential.pdf</p>
+                    <p id="secret-size" class="text-xs font-mono text-gray-400">145 KB</p>
+                  </div>
+                </div>
+                <button type="button" id="btn-remove-secret" class="text-gray-400 hover:text-rose-400 p-1.5 transition">
+                  <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAPACITY PROGRESS GAUGE (Real-time) -->
+      <div id="capacity-meter-box" class="glass-panel rounded-2xl p-5 border border-white/10 hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-gray-400 flex items-center space-x-1.5">
+            <i data-lucide="activity" class="w-4 h-4 text-cyan-400"></i>
+            <span>CAPACITY ESTIMATION</span>
+          </span>
+          <span id="capacity-percent-badge" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-800">
+            0% USED
+          </span>
+        </div>
+        <div class="w-full bg-cyber-900 rounded-full h-3.5 overflow-hidden p-0.5 border border-white/10">
+          <div id="capacity-progress-bar" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center justify-between mt-2 text-xs font-mono text-gray-400">
+          <span id="capacity-secret-label">Secret: 0 KB</span>
+          <span id="capacity-cover-label">Usable Carrier Limit: 0 KB</span>
+        </div>
+        <div id="capacity-alert-box" class="mt-3 hidden text-xs font-medium p-3 rounded-xl"></div>
+      </div>
+
+      <!-- ADVANCED SECURITY CONFIGURATION -->
+      <div class="glass-panel rounded-2xl p-6 border border-white/10 space-y-6">
+        <h3 class="text-sm font-semibold tracking-wider text-cyan-400 uppercase flex items-center space-x-2">
+          <i data-lucide="cpu" class="w-4 h-4"></i>
+          <span>3. Cryptography & Steganography Parameters</span>
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Bitcoin ECIES Encryption -->
+          <div class="space-y-3 p-4 rounded-xl bg-cyber-900/60 border border-white/5">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-white flex items-center space-x-2">
+                  <i data-lucide="shield" class="w-4 h-4 text-cyan-400"></i>
+                  <span>Bitcoin SECP256K1 Encryption</span>
+                </label>
+                <p class="text-xs text-gray-400 mt-0.5">Encrypts payload & fingerprint with recipient's public key (ECDH + AES-256-GCM)</p>
+              </div>
+              <input type="checkbox" id="check-encrypt" checked class="w-5 h-5 rounded bg-cyber-950 border-gray-600 text-cyan-500 focus:ring-cyan-500">
+            </div>
+
+            <div id="recipient-key-section" class="pt-2 space-y-2">
+              <label class="text-xs font-mono text-gray-400">Recipient Public Key (.pem)</label>
+              <div class="flex items-center space-x-2">
+                <input type="file" id="input-recipient-key" class="hidden" accept=".pem,.key">
+                <button type="button" id="btn-browse-recipient" class="px-3 py-2 text-xs font-medium rounded-lg glass-input text-gray-300 hover:text-white flex items-center space-x-2">
+                  <i data-lucide="key" class="w-3.5 h-3.5"></i>
+                  <span id="recipient-key-name">Select Public Key</span>
+                </button>
+                <span id="recipient-fp-preview" class="text-xs font-mono text-cyan-400 truncate"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Multi-Carrier Splitting -->
+          <div class="space-y-3 p-4 rounded-xl bg-cyber-900/60 border border-white/5">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-white flex items-center space-x-2">
+                  <i data-lucide="share-2" class="w-4 h-4 text-purple-400"></i>
+                  <span>Multi-Carrier Splitting</span>
+                </label>
+                <p class="text-xs text-gray-400 mt-0.5">Distribute large secret across N randomized carrier files</p>
+              </div>
+              <input type="checkbox" id="check-split" class="w-5 h-5 rounded bg-cyber-950 border-gray-600 text-purple-500 focus:ring-purple-500">
+            </div>
+
+            <div id="split-slider-section" class="pt-2 space-y-2 opacity-50 pointer-events-none transition-opacity">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-gray-400">Split Parts:</span>
+                <span id="split-parts-label" class="text-purple-400 font-bold">2 Parts</span>
+              </div>
+              <input type="range" id="input-split-slider" min="2" max="50" value="3" class="w-full accent-purple-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- PNG/BMP Bit Position -->
+        <div class="flex items-center justify-between pt-2 text-xs text-gray-400 border-t border-white/5">
+          <span>Pixel Bit Layer (Lossless PNG/BMP only):</span>
+          <select id="select-bit-pos" class="glass-input rounded-lg px-3 py-1.5 text-xs text-gray-200">
+            <option value="lsb" selected>LSB (Least Significant Bit - Imperceptible)</option>
+            <option value="mid">Mid-Bit (Higher robustness)</option>
+            <option value="msb">MSB (Maximum robustness)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ACTION BUTTON -->
+      <button type="button" id="btn-execute-embed" class="w-full cyber-btn py-4 rounded-2xl font-bold text-cyber-950 tracking-wider uppercase text-sm flex items-center justify-center space-x-2 shadow-xl shadow-cyan-500/20">
+        <i data-lucide="zap" class="w-5 h-5 fill-current"></i>
+        <span>Execute Steganographic Concealment</span>
+      </button>
+
+      <!-- RESULTS & DOWNLOAD CARD -->
+      <div id="embed-result-card" class="glass-panel rounded-2xl p-6 border border-cyan-500/40 hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-emerald-400 font-semibold">
+            <i data-lucide="check-circle" class="w-5 h-5"></i>
+            <span>Concealment Successful & Cryptographically Verified!</span>
+          </div>
+          <span id="result-fp-tag" class="text-xs font-mono text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-md border border-cyan-800"></span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2" id="embed-download-actions">
+          <!-- Dynamic Download buttons injected here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 2: EXTRACT / DECODE -->
+    <!-- ======================================================================= -->
+    <section id="tab-extract" class="tab-content hidden space-y-6">
+      <div class="pb-4 border-b border-white/5">
+        <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+          <span>Extract Secret from Stego Carrier</span>
+        </h2>
+        <p class="text-sm text-gray-400">Reconstruct and decrypt hidden secret payload using the stego carrier and its fingerprint seed.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Stego file dropzone -->
+        <div class="lg:col-span-6 space-y-4">
+          <label class="text-xs font-semibold tracking-wider text-cyan-400 uppercase flex items-center space-x-1.5">
+            <i data-lucide="file-question" class="w-4 h-4"></i>
+            <span>1. Select Stego Carrier File</span>
+          </label>
+          <div id="dropzone-ext-stego" class="dropzone border-2 border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer glass-panel group hover:border-cyan-500/50">
+            <input type="file" id="input-ext-stego" class="hidden">
+            <div id="ext-stego-empty" class="py-8 space-y-2">
+              <i data-lucide="upload" class="w-8 h-8 text-cyan-400 mx-auto"></i>
+              <p class="font-medium text-white text-sm">Upload Stego File</p>
+              <p class="text-xs text-gray-500">Image, Audio, Video, or Text</p>
+            </div>
+            <div id="ext-stego-loaded" class="hidden py-4 text-left">
+              <p id="ext-stego-name" class="font-bold text-white text-sm truncate"></p>
+              <p id="ext-stego-size" class="text-xs font-mono text-gray-400"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fingerprint file dropzone -->
+        <div class="lg:col-span-6 space-y-4">
+          <label class="text-xs font-semibold tracking-wider text-purple-400 uppercase flex items-center space-x-1.5">
+            <i data-lucide="fingerprint" class="w-4 h-4"></i>
+            <span>2. Fingerprint File (.fingerprint or .fingerprint.enc)</span>
+          </label>
+          <div id="dropzone-ext-fp" class="dropzone border-2 border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer glass-panel group hover:border-purple-500/50">
+            <input type="file" id="input-ext-fp" class="hidden" accept=".fingerprint,.enc">
+            <div id="ext-fp-empty" class="py-8 space-y-2">
+              <i data-lucide="key" class="w-8 h-8 text-purple-400 mx-auto"></i>
+              <p class="font-medium text-white text-sm">Upload Fingerprint Token</p>
+              <p class="text-xs text-gray-500">Required to reconstruct non-linear PRNG positions</p>
+            </div>
+            <div id="ext-fp-loaded" class="hidden py-4 text-left">
+              <p id="ext-fp-name" class="font-bold text-white text-sm truncate"></p>
+              <p id="ext-fp-type" class="text-xs font-mono text-cyan-400"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decryption settings -->
+      <div class="glass-panel rounded-2xl p-6 border border-white/10 space-y-4">
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-white flex items-center space-x-2">
+            <i data-lucide="unlock" class="w-4 h-4 text-cyan-400"></i>
+            <span>Decrypt with Recipient SECP256K1 Private Key</span>
+          </label>
+          <input type="checkbox" id="check-ext-decrypt" checked class="w-5 h-5 rounded bg-cyber-950 border-gray-600 text-cyan-500">
+        </div>
+
+        <div id="ext-private-key-section" class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label class="text-xs font-mono text-gray-400 mb-1 block">Your Private Key (.pem)</label>
+            <input type="file" id="input-ext-privkey" class="hidden" accept=".pem,.key">
+            <button type="button" id="btn-browse-ext-priv" class="w-full px-4 py-2.5 text-xs font-medium rounded-xl glass-input text-gray-300 hover:text-white flex items-center justify-center space-x-2">
+              <i data-lucide="file-key" class="w-4 h-4 text-purple-400"></i>
+              <span id="ext-priv-name">Select Private Key File</span>
+            </button>
+          </div>
+          <div>
+            <label class="text-xs font-mono text-gray-400 mb-1 block">Private Key Password (if encrypted)</label>
+            <input type="password" id="input-ext-pwd" placeholder="Enter password or leave blank" class="w-full glass-input rounded-xl px-4 py-2 text-xs text-white">
+          </div>
+        </div>
+      </div>
+
+      <button type="button" id="btn-execute-extract" class="w-full cyber-btn py-4 rounded-2xl font-bold text-cyber-950 tracking-wider uppercase text-sm flex items-center justify-center space-x-2 shadow-xl shadow-cyan-500/20">
+        <i data-lucide="download-cloud" class="w-5 h-5"></i>
+        <span>Extract & Reconstruct Secret File</span>
+      </button>
+
+      <!-- Extracted Result Card -->
+      <div id="extract-result-card" class="glass-panel rounded-2xl p-6 border border-emerald-500/40 hidden space-y-4">
+        <div class="flex items-center space-x-3 text-emerald-400 font-semibold">
+          <i data-lucide="check-check" class="w-6 h-6"></i>
+          <div>
+            <p class="text-white font-bold" id="recovered-filename">secret.pdf</p>
+            <p class="text-xs text-gray-400" id="recovered-filesize">Size: 145 KB</p>
+          </div>
+        </div>
+        <a id="btn-download-recovered" href="#" download class="block w-full text-center py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-cyber-950 font-bold text-sm tracking-wider uppercase transition shadow-lg shadow-emerald-500/20">
+          Download Recovered Original File
+        </a>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 3: CAPACITY LAB -->
+    <!-- ======================================================================= -->
+    <section id="tab-capacity" class="tab-content hidden space-y-6">
+      <div class="pb-4 border-b border-white/5">
+        <h2 class="text-2xl font-bold tracking-tight text-white">Carrier Capacity & Feasibility Lab</h2>
+        <p class="text-sm text-gray-400">Analyze usable DCT coefficients, frequency phase bins, and pixel capacities for any carrier.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <label class="text-xs font-semibold tracking-wider text-cyan-400 uppercase">Inspect Carrier File</label>
+          <div id="dropzone-cap-cover" class="dropzone border-2 border-dashed border-white/15 rounded-xl p-8 text-center cursor-pointer group hover:border-cyan-500/50">
+            <input type="file" id="input-cap-cover" class="hidden">
+            <i data-lucide="folder-search" class="w-8 h-8 text-cyan-400 mx-auto mb-2"></i>
+            <p class="text-sm font-medium text-white">Drop carrier file here</p>
+            <p id="cap-cover-selected" class="text-xs font-mono text-gray-400 mt-1"></p>
+          </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <label class="text-xs font-semibold tracking-wider text-purple-400 uppercase">Target Secret (Optional)</label>
+          <div id="dropzone-cap-secret" class="dropzone border-2 border-dashed border-white/15 rounded-xl p-8 text-center cursor-pointer group hover:border-purple-500/50">
+            <input type="file" id="input-cap-secret" class="hidden">
+            <i data-lucide="file-check" class="w-8 h-8 text-purple-400 mx-auto mb-2"></i>
+            <p class="text-sm font-medium text-white">Drop secret file to test fit</p>
+            <p id="cap-secret-selected" class="text-xs font-mono text-gray-400 mt-1"></p>
+          </div>
+        </div>
+      </div>
+
+      <div id="capacity-details-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 hidden">
+        <div class="glass-panel rounded-xl p-4 border border-white/5">
+          <p class="text-xs font-mono text-gray-400">CARRIER TYPE</p>
+          <p id="metric-carrier-type" class="text-xl font-bold text-cyan-400 mt-1">-</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 border border-white/5">
+          <p class="text-xs font-mono text-gray-400">CARRIER FILE SIZE</p>
+          <p id="metric-carrier-size" class="text-xl font-bold text-white mt-1">-</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 border border-white/5">
+          <p class="text-xs font-mono text-gray-400">MAX EMBED CAPACITY</p>
+          <p id="metric-carrier-capacity" class="text-xl font-bold text-emerald-400 mt-1">-</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 4: SPLIT & MERGE -->
+    <!-- ======================================================================= -->
+    <section id="tab-merge" class="tab-content hidden space-y-6">
+      <div class="pb-4 border-b border-white/5">
+        <h2 class="text-2xl font-bold tracking-tight text-white">Reassemble Multi-Carrier Split Stego</h2>
+        <p class="text-sm text-gray-400">Merge distributed stego carrier chunks into a single decrypted original secret file.</p>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-6 border border-white/10 space-y-6">
+        <div>
+          <label class="text-xs font-semibold tracking-wider text-cyan-400 uppercase mb-2 block">1. Select All Split Stego Files</label>
+          <div id="dropzone-merge-files" class="dropzone border-2 border-dashed border-white/15 rounded-xl p-8 text-center cursor-pointer group hover:border-cyan-500/50">
+            <input type="file" id="input-merge-files" multiple class="hidden">
+            <i data-lucide="layers" class="w-8 h-8 text-cyan-400 mx-auto mb-2"></i>
+            <p class="text-sm font-medium text-white">Select multiple carrier files (.jpg, .png, .flac, etc.)</p>
+            <p id="merge-files-count" class="text-xs font-mono text-cyan-400 mt-1">0 files selected</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold tracking-wider text-purple-400 uppercase mb-2 block">2. Shared Fingerprint File</label>
+          <div id="dropzone-merge-fp" class="dropzone border-2 border-dashed border-white/15 rounded-xl p-6 text-center cursor-pointer group hover:border-purple-500/50">
+            <input type="file" id="input-merge-fp" class="hidden" accept=".fingerprint,.enc">
+            <i data-lucide="fingerprint" class="w-6 h-6 text-purple-400 mx-auto mb-1"></i>
+            <p class="text-xs font-medium text-white">Upload .fingerprint or .fingerprint.enc</p>
+            <p id="merge-fp-selected" class="text-xs font-mono text-gray-400"></p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label class="text-xs font-mono text-gray-400 mb-1 block">Private Key (.pem)</label>
+            <input type="file" id="input-merge-priv" class="hidden" accept=".pem">
+            <button type="button" id="btn-browse-merge-priv" class="w-full px-4 py-2.5 text-xs font-medium rounded-xl glass-input text-gray-300 hover:text-white flex items-center justify-center space-x-2">
+              <i data-lucide="key" class="w-4 h-4 text-purple-400"></i>
+              <span id="merge-priv-name">Select Private Key</span>
+            </button>
+          </div>
+          <div>
+            <label class="text-xs font-mono text-gray-400 mb-1 block">Private Key Password</label>
+            <input type="password" id="input-merge-pwd" placeholder="Enter password or leave blank" class="w-full glass-input rounded-xl px-4 py-2 text-xs text-white">
+          </div>
+        </div>
+
+        <button type="button" id="btn-execute-merge" class="w-full cyber-btn py-3.5 rounded-xl font-bold text-cyber-950 tracking-wider uppercase text-xs">
+          Reassemble & Decrypt File
+        </button>
+
+        <div id="merge-result-card" class="hidden p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-center space-y-2">
+          <p class="text-white font-bold text-sm" id="merge-result-name">Reconstructed File</p>
+          <a id="btn-download-merged" href="#" download class="inline-block px-6 py-2 rounded-lg bg-emerald-500 text-black font-bold text-xs uppercase">
+            Download Assembled File
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 5: KEY VAULT -->
+    <!-- ======================================================================= -->
+    <section id="tab-keys" class="tab-content hidden space-y-6">
+      <div class="pb-4 border-b border-white/5">
+        <h2 class="text-2xl font-bold tracking-tight text-white">SECP256K1 Bitcoin Key Vault</h2>
+        <p class="text-sm text-gray-400">Generate, inspect, and export military-grade elliptic curve keypairs used by the Bitcoin network.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Generator Card -->
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <h3 class="text-sm font-semibold tracking-wider text-cyan-400 uppercase flex items-center space-x-2">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Generate New Keypair</span>
+          </h3>
+          <p class="text-xs text-gray-400">Creates an asynchronous SECP256K1 private & public keypair with PKCS8 encoding.</p>
+
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">Password Protection (Optional)</label>
+            <input type="password" id="input-keygen-pwd" placeholder="Leave empty for unencrypted key" class="w-full glass-input rounded-xl px-4 py-2 text-xs text-white">
+          </div>
+
+          <button type="button" id="btn-generate-keys" class="w-full cyber-btn py-3 rounded-xl font-bold text-cyber-950 text-xs tracking-wider uppercase">
+            Generate SECP256K1 Keys
+          </button>
+
+          <div id="keygen-results" class="space-y-3 pt-3 hidden">
+            <div class="p-3 rounded-xl bg-cyber-950 border border-white/5 text-xs font-mono space-y-1">
+              <span class="text-gray-400">Public Key Fingerprint (Double-SHA256):</span>
+              <p id="generated-fingerprint" class="text-cyan-400 font-bold break-all"></p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <button id="btn-dl-priv" class="px-3 py-2 rounded-lg bg-cyber-850 hover:bg-cyber-800 border border-white/10 text-xs font-mono text-white flex items-center justify-center space-x-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-purple-400"></i>
+                <span>Private Key (.pem)</span>
+              </button>
+              <button id="btn-dl-pub" class="px-3 py-2 rounded-lg bg-cyber-850 hover:bg-cyber-800 border border-white/10 text-xs font-mono text-white flex items-center justify-center space-x-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Public Key (.pem)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Information Guide -->
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <h3 class="text-sm font-semibold tracking-wider text-purple-400 uppercase flex items-center space-x-2">
+            <i data-lucide="info" class="w-4 h-4"></i>
+            <span>Cryptographic Architecture</span>
+          </h3>
+          <div class="text-xs text-gray-400 space-y-3 leading-relaxed">
+            <p><b class="text-white">SECP256K1 Elliptic Curve:</b> $y^2 = x^3 + 7 \pmod p$. Provides 128-bit quantum-resistant symmetric security equivalent.</p>
+            <p><b class="text-white">ECIES Hybrid Encryption:</b> The sender creates an ephemeral SECP256K1 keypair, performs Diffie-Hellman exchange with the recipient's public key, and derives a 32-byte AES-GCM key via HKDF-SHA256.</p>
+            <p><b class="text-white">Non-Repudiation:</b> Public key fingerprints are calculated using Bitcoin's exact double-SHA256 hashing protocol.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 6: SIGN & VERIFY -->
+    <!-- ======================================================================= -->
+    <section id="tab-sign" class="tab-content hidden space-y-6">
+      <div class="pb-4 border-b border-white/5">
+        <h2 class="text-2xl font-bold tracking-tight text-white">ECDSA Digital Signatures</h2>
+        <p class="text-sm text-gray-400">Sign files using SECP256K1 ECDSA and verify digital signatures against tamper attacks.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Sign Box -->
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <h3 class="text-sm font-semibold tracking-wider text-cyan-400 uppercase">Create Signature (.sig)</h3>
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">File to Sign</label>
+            <input type="file" id="input-sign-file" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">Private Key (.pem)</label>
+            <input type="file" id="input-sign-priv" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-white" accept=".pem">
+          </div>
+          <button type="button" id="btn-execute-sign" class="w-full cyber-btn py-3 rounded-xl font-bold text-cyber-950 text-xs uppercase tracking-wider">
+            Sign File
+          </button>
+          <a id="btn-download-sig" href="#" download class="hidden text-center block w-full py-2.5 rounded-xl bg-cyan-500 text-black font-bold text-xs">
+            Download Signature (.sig)
+          </a>
+        </div>
+
+        <!-- Verify Box -->
+        <div class="glass-panel rounded-2xl p-6 space-y-4">
+          <h3 class="text-sm font-semibold tracking-wider text-purple-400 uppercase">Verify Signature</h3>
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">Original File</label>
+            <input type="file" id="input-verify-file" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">Signature File (.sig)</label>
+            <input type="file" id="input-verify-sig" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-white" accept=".sig">
+          </div>
+          <div>
+            <label class="text-xs font-mono text-gray-400 block mb-1">Signer's Public Key (.pem)</label>
+            <input type="file" id="input-verify-pub" class="w-full glass-input rounded-xl px-3 py-2 text-xs text-white" accept=".pem">
+          </div>
+          <button type="button" id="btn-execute-verify" class="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider transition">
+            Verify Authenticity
+          </button>
+          <div id="verify-result-badge" class="hidden p-3 rounded-xl text-center text-xs font-bold"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- REAL-TIME CRYPTOGRAPHIC & STEGO TERMINAL LOGS -->
+    <!-- ======================================================================= -->
+    <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden shadow-2xl">
+      <div class="bg-cyber-900/90 px-4 py-3 border-b border-white/5 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="flex space-x-1.5">
+            <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+          </div>
+          <span class="text-xs font-mono text-gray-400 ml-2 flex items-center space-x-1.5">
+            <i data-lucide="terminal" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>STEGANOGRAPHY_KERNEL_LOGS</span>
+          </span>
+        </div>
+        <button id="btn-clear-logs" class="text-[11px] font-mono text-gray-500 hover:text-gray-300">CLEAR</button>
+      </div>
+      <div id="terminal-logs" class="p-4 bg-cyber-950 font-mono text-xs text-gray-300 h-44 overflow-y-auto space-y-1 selection:bg-cyan-500 selection:text-black">
+        <p class="text-gray-500">[SYSTEM] Kernel online. SECP256K1 initialized. Non-linear PRNG ready.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- TOAST NOTIFICATION POPUP -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- Lucide Icon Initializer & App Logic -->
+  <script src="/app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
