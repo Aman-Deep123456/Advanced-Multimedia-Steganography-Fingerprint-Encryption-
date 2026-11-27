@@ -12,6 +12,7 @@ import hashlib
 import secrets
 import subprocess
 import tempfile
+import shutil
 from reedsolo import RSCodec
 import torch
 
@@ -58,6 +59,8 @@ def remove_ecc(encoded_bytes, ecc_symbols=32):
     return rs.decode(encoded_bytes)[0]
 
 def convert_to_wav(input_path, output_path):
+    if shutil.which('ffmpeg') is None:
+        return False
     try:
         result = subprocess.run([
             'ffmpeg', '-i', input_path, '-ar', '44100', '-ac', '2',
@@ -191,40 +194,33 @@ def f5_embed_gpu(cover_path, payload_bytes, output_path, fingerprint_bytes):
     
     positions = prng_positions(len(usable_coeffs), needed_bits, fingerprint_bytes)
     
-    payload_bits = torch.from_numpy(payload_bits_np).to(DEVICE, dtype=torch.int32)
-    positions_tensor = torch.tensor(positions, device=DEVICE, dtype=torch.int64)
-    
-    try:
-        for idx in range(len(payload_bits)):
-            pos = positions_tensor[idx].item()
-            bit = payload_bits[idx].item()
-            
-            comp_idx, i, j, coef = usable_coeffs[pos]
-            comp = coef_arrays[comp_idx]
-            
-            target_bit = int(bit)
-            current_bit = int(abs(coef) % 2)
-            
-            if current_bit != target_bit:
-                if coef > 0:
-                    if coef % 2 == 0:
-                        new_val = coef + 1
-                    else:
-                        new_val = coef - 1
-                        if new_val == 0:
-                            new_val = coef + 1
+    for idx in range(len(payload_bits_np)):
+        pos = positions[idx]
+        bit = payload_bits_np[idx]
+        
+        comp_idx, i, j, coef = usable_coeffs[pos]
+        comp = coef_arrays[comp_idx]
+        
+        target_bit = int(bit)
+        current_bit = int(abs(coef) % 2)
+        
+        if current_bit != target_bit:
+            if coef > 0:
+                if coef % 2 == 0:
+                    new_val = coef + 1
                 else:
-                    if abs(coef) % 2 == 0:
-                        new_val = coef - 1
-                    else:
+                    new_val = coef - 1
+                    if new_val == 0:
                         new_val = coef + 1
-                        if new_val == 0:
-                            new_val = coef - 1
-                
-                comp[i, j] = new_val
-    finally:
-        secure_cleanup_tensor(payload_bits)
-        secure_cleanup_tensor(positions_tensor)
+            else:
+                if abs(coef) % 2 == 0:
+                    new_val = coef - 1
+                else:
+                    new_val = coef + 1
+                    if new_val == 0:
+                        new_val = coef - 1
+            
+            comp[i, j] = new_val
     
     jpeg.coef_arrays = coef_arrays
     jpegio.write(jpeg, output_path)
@@ -248,37 +244,23 @@ def f5_extract_gpu(stego_path, fingerprint_bytes):
                     usable_coeffs.append(coef)
     
     max_bytes = len(usable_coeffs) // 8
+    usable_bits = (np.abs(np.array(usable_coeffs, dtype=np.int32)) % 2).astype(np.uint8)
     
-    usable_coeffs_np = np.array(usable_coeffs, dtype=np.int32)
-    usable_coeffs_tensor = torch.from_numpy(usable_coeffs_np).to(DEVICE)
-    
-    try:
-        for try_size in range(100, max_bytes + 1, 100):
+    # Fast NumPy extraction without slow PyTorch MPS driver cache flushes
+    for try_size in range(100, max_bytes + 1, 100):
+        try:
             positions = prng_positions(len(usable_coeffs), try_size * 8, fingerprint_bytes)
-            positions_tensor = torch.tensor(positions, device=DEVICE, dtype=torch.int64)
+            bits_np = usable_bits[positions]
+            payload_bytes = np.packbits(bits_np).tobytes()
             
-            try:
-                selected_coeffs = usable_coeffs_tensor[positions_tensor]
-                bits = torch.abs(selected_coeffs) % 2
-                bits_np = bits.cpu().numpy().astype(np.uint8)
-                
-                payload_bytes = np.packbits(bits_np).tobytes()
-                
-                decoded = remove_ecc(payload_bytes, ecc_symbols=32)
-                
-                if decoded[0:1] == b'\x01':
-                    decompressed = zlib.decompress(decoded[1:])
-                    return decompressed
-                elif decoded[0:1] == b'\x00':
-                    return decoded[1:]
-            except:
-                continue
-            finally:
-                secure_cleanup_tensor(selected_coeffs)
-                secure_cleanup_tensor(bits)
-                secure_cleanup_tensor(positions_tensor)
-    finally:
-        secure_cleanup_tensor(usable_coeffs_tensor)
+            decoded = remove_ecc(payload_bytes, ecc_symbols=32)
+            
+            if decoded[0:1] == b'\x01':
+                return zlib.decompress(decoded[1:])
+            elif decoded[0:1] == b'\x00':
+                return decoded[1:]
+        except Exception:
+            continue
     
     raise ValueError("Could not extract valid data")
 
@@ -489,8 +471,12 @@ def phase_coding_extract_gpu(stego_path, fingerprint_bytes):
     raise ValueError("Could not extract valid audio data")
 
 def h264_embed(cover_path, payload_bytes, output_path, fingerprint_bytes):
+    if shutil.which('ffmpeg') is None:
+        raise FileNotFoundError("FFmpeg is not installed on your system. To use video steganography, please install it: brew install ffmpeg")
+    
     temp_dir = tempfile.mkdtemp()
     raw_h264 = os.path.join(temp_dir, 'stream.h264')
+    modified_h264 = os.path.join(temp_dir, 'modified.h264')
     
     try:
         result = subprocess.run([
@@ -515,21 +501,25 @@ def h264_embed(cover_path, payload_bytes, output_path, fingerprint_bytes):
         ecc_payload = add_ecc(final_payload, ecc_symbols=32)
         payload_bits_np = np.unpackbits(np.frombuffer(ecc_payload, dtype=np.uint8))
         
+        # Fast C-level search for NAL start codes
+        bs_bytes = bytes(bitstream)
         nal_starts = []
-        for i in range(len(bitstream) - 3):
-            if bitstream[i:i+3] == b'\x00\x00\x01' or (i > 0 and bitstream[i-1:i+3] == b'\x00\x00\x00\x01'):
-                nal_starts.append(i)
+        pos = 0
+        while True:
+            idx = bs_bytes.find(b'\x00\x00\x01', pos)
+            if idx == -1:
+                break
+            actual_start = idx - 1 if idx > 0 and bs_bytes[idx-1] == 0 else idx
+            nal_starts.append(actual_start)
+            pos = idx + 3
         
         modifiable_positions = []
         for idx in range(len(nal_starts) - 1):
             nal_start = nal_starts[idx]
             nal_end = nal_starts[idx + 1]
-            nal_data = bitstream[nal_start:nal_end]
+            nal_data = bs_bytes[nal_start:nal_end]
             
-            start_code_len = 3
-            if nal_start > 0 and bitstream[nal_start-1] == 0:
-                start_code_len = 4
-            
+            start_code_len = 4 if bs_bytes[nal_start] == 0 and bs_bytes[nal_start+1] == 0 and bs_bytes[nal_start+2] == 0 else 3
             if len(nal_data) < start_code_len + 10:
                 continue
             
@@ -537,9 +527,10 @@ def h264_embed(cover_path, payload_bytes, output_path, fingerprint_bytes):
             
             if nal_type in [1, 5]:
                 for offset in range(start_code_len + 5, len(nal_data) - 5):
-                    pos = nal_start + offset
-                    if bitstream[pos] != 0 and bitstream[pos] != 0xFF:
-                        modifiable_positions.append(pos)
+                    p = nal_start + offset
+                    b = bs_bytes[p]
+                    if b != 0 and b != 0xFF:
+                        modifiable_positions.append(p)
         
         if len(payload_bits_np) > len(modifiable_positions):
             raise ValueError(f"Video too small: need {len(payload_bits_np)} bits, have {len(modifiable_positions)} positions")
@@ -547,17 +538,10 @@ def h264_embed(cover_path, payload_bytes, output_path, fingerprint_bytes):
         positions = prng_positions(len(modifiable_positions), len(payload_bits_np), fingerprint_bytes)
         
         bitstream_np = np.frombuffer(bitstream, dtype=np.uint8).copy()
-        payload_bits = torch.from_numpy(payload_bits_np).to(DEVICE, dtype=torch.int32)
-        positions_tensor = torch.tensor(positions, device=DEVICE, dtype=torch.int64)
         
-        try:
-            for idx in range(len(payload_bits)):
-                pos = modifiable_positions[positions_tensor[idx].item()]
-                bit = payload_bits[idx].item()
-                bitstream_np[pos] = (bitstream_np[pos] & 0xFE) | int(bit)
-        finally:
-            secure_cleanup_tensor(payload_bits)
-            secure_cleanup_tensor(positions_tensor)
+        # High-performance vectorized bit insertion (no slow MPS GPU sync loop)
+        actual_positions = np.array([modifiable_positions[p] for p in positions], dtype=np.int64)
+        bitstream_np[actual_positions] = (bitstream_np[actual_positions] & 0xFE) | payload_bits_np
         
         modified_h264 = os.path.join(temp_dir, 'modified.h264')
         with open(modified_h264, 'wb') as f:
@@ -581,6 +565,9 @@ def h264_embed(cover_path, payload_bytes, output_path, fingerprint_bytes):
             os.rmdir(temp_dir)
 
 def h264_extract_gpu(stego_path, fingerprint_bytes):
+    if shutil.which('ffmpeg') is None:
+        raise FileNotFoundError("FFmpeg is not installed on your system. To use video steganography, please install it: brew install ffmpeg")
+    
     temp_dir = tempfile.mkdtemp()
     raw_h264 = os.path.join(temp_dir, 'stream.h264')
     
@@ -596,67 +583,56 @@ def h264_extract_gpu(stego_path, fingerprint_bytes):
         with open(raw_h264, 'rb') as f:
             bitstream = f.read()
         
+        # Fast C-level search for NAL start codes
+        bs_bytes = bytes(bitstream)
         nal_starts = []
-        for i in range(len(bitstream) - 3):
-            if bitstream[i:i+3] == b'\x00\x00\x01' or (i > 0 and bitstream[i-1:i+3] == b'\x00\x00\x00\x01'):
-                nal_starts.append(i)
+        pos = 0
+        while True:
+            idx = bs_bytes.find(b'\x00\x00\x01', pos)
+            if idx == -1:
+                break
+            actual_start = idx - 1 if idx > 0 and bs_bytes[idx-1] == 0 else idx
+            nal_starts.append(actual_start)
+            pos = idx + 3
         
         modifiable_positions = []
         for idx in range(len(nal_starts) - 1):
             nal_start = nal_starts[idx]
             nal_end = nal_starts[idx + 1]
-            nal_data = bitstream[nal_start:nal_end]
+            nal_data = bs_bytes[nal_start:nal_end]
             
-            start_code_len = 3
-            if nal_start > 0 and bitstream[nal_start-1] == 0:
-                start_code_len = 4
-            
+            start_code_len = 4 if bs_bytes[nal_start] == 0 and bs_bytes[nal_start+1] == 0 and bs_bytes[nal_start+2] == 0 else 3
             if len(nal_data) < start_code_len + 10:
                 continue
             
             nal_type = nal_data[start_code_len] & 0x1F
-            
             if nal_type in [1, 5]:
                 for offset in range(start_code_len + 5, len(nal_data) - 5):
-                    pos = nal_start + offset
-                    if bitstream[pos] != 0 and bitstream[pos] != 0xFF:
-                        modifiable_positions.append(pos)
+                    p = nal_start + offset
+                    b = bs_bytes[p]
+                    if b != 0 and b != 0xFF:
+                        modifiable_positions.append(p)
         
         max_bytes = len(modifiable_positions) // 8
-        
         bitstream_np = np.frombuffer(bitstream, dtype=np.uint8)
-        bitstream_tensor = torch.from_numpy(bitstream_np).to(DEVICE, dtype=torch.int32)
+        mod_pos_arr = np.array(modifiable_positions, dtype=np.int64)
+        modifiable_bits = (bitstream_np[mod_pos_arr] & 1).astype(np.uint8)
         
-        try:
-            for try_size in range(1000, max_bytes + 1, 1000):
-                try:
-                    positions = prng_positions(len(modifiable_positions), try_size * 8, fingerprint_bytes)
-                    
-                    actual_positions = [modifiable_positions[p] for p in positions]
-                    positions_tensor = torch.tensor(actual_positions, device=DEVICE, dtype=torch.int64)
-                    
-                    try:
-                        selected_bytes = bitstream_tensor[positions_tensor]
-                        bits = selected_bytes & 1
-                        bits_np = bits.cpu().numpy().astype(np.uint8)
-                        
-                        payload_bytes = np.packbits(bits_np).tobytes()
-                        
-                        decoded = remove_ecc(payload_bytes, ecc_symbols=32)
-                        
-                        if decoded[0:1] == b'\x01':
-                            decompressed = zlib.decompress(decoded[1:])
-                            return decompressed
-                        elif decoded[0:1] == b'\x00':
-                            return decoded[1:]
-                    finally:
-                        secure_cleanup_tensor(selected_bytes)
-                        secure_cleanup_tensor(bits)
-                        secure_cleanup_tensor(positions_tensor)
-                except:
-                    continue
-        finally:
-            secure_cleanup_tensor(bitstream_tensor)
+        # Fast trial loop in pure NumPy without GPU driver cache flushes
+        for try_size in range(100, max_bytes + 1, 100):
+            try:
+                positions = prng_positions(len(modifiable_positions), try_size * 8, fingerprint_bytes)
+                bits_np = modifiable_bits[positions]
+                payload_bytes = np.packbits(bits_np).tobytes()
+                
+                decoded = remove_ecc(payload_bytes, ecc_symbols=32)
+                
+                if decoded[0:1] == b'\x01':
+                    return zlib.decompress(decoded[1:])
+                elif decoded[0:1] == b'\x00':
+                    return decoded[1:]
+            except Exception:
+                continue
         
         raise ValueError("Could not extract valid video data")
         
@@ -699,21 +675,9 @@ def embed_in_image_gpu(cover_path, payload_bytes, output_path, bit_position="lsb
     mask = bit_masks.get(bit_position, 0xFE)
     shift = bit_shifts.get(bit_position, 0)
     
-    flat_pixels_tensor = torch.from_numpy(flat_pixels).to(DEVICE, dtype=torch.int32)
-    payload_bits = torch.from_numpy(payload_bits_np).to(DEVICE, dtype=torch.int32)
-    positions_tensor = torch.tensor(positions, device=DEVICE, dtype=torch.int64)
-    
-    try:
-        for idx in range(len(payload_bits)):
-            pos = positions_tensor[idx].item()
-            bit = payload_bits[idx].item()
-            flat_pixels_tensor[pos] = (flat_pixels_tensor[pos] & mask) | (int(bit) << shift)
-        
-        stego_pixels_np = flat_pixels_tensor.cpu().numpy().astype(np.uint8).reshape(pixels.shape)
-    finally:
-        secure_cleanup_tensor(flat_pixels_tensor)
-        secure_cleanup_tensor(payload_bits)
-        secure_cleanup_tensor(positions_tensor)
+    pos_arr = np.array(positions, dtype=np.int64)
+    flat_pixels[pos_arr] = (flat_pixels[pos_arr] & mask) | (payload_bits_np.astype(np.uint8) << shift)
+    stego_pixels_np = flat_pixels.reshape(pixels.shape)
     
     stego_img = Image.fromarray(stego_pixels_np, 'RGB')
     stego_img.save(output_path, quality=95)
@@ -739,29 +703,19 @@ def extract_from_image_gpu(stego_path, bit_position="lsb", fingerprint_bytes=Non
     shift = bit_shifts.get(bit_position, 0)
     
     max_bytes = len(flat_pixels) * 2 // 8
+    pixel_bits = ((flat_pixels >> shift) & 1).astype(np.uint8)
     
-    flat_pixels_tensor = torch.from_numpy(flat_pixels).to(DEVICE, dtype=torch.int32)
-    
-    try:
-        for try_size in range(100, max_bytes + 1, 100):
+    # Fast NumPy extraction without slow PyTorch MPS driver cache flushes
+    for try_size in range(100, max_bytes + 1, 100):
+        try:
             positions = prng_positions(len(flat_pixels), try_size * 8, fingerprint_bytes)
-            positions_tensor = torch.tensor(positions, device=DEVICE, dtype=torch.int64)
+            bits_np = pixel_bits[positions]
+            payload = np.packbits(bits_np).tobytes()
             
-            try:
-                selected_pixels = flat_pixels_tensor[positions_tensor]
-                bits = (selected_pixels >> shift) & 1
-                bits_np = bits.cpu().numpy().astype(np.uint8)
-                
-                payload = np.packbits(bits_np).tobytes()
-                
-                if payload[:4] == MAGIC:
-                    return payload
-            finally:
-                secure_cleanup_tensor(selected_pixels)
-                secure_cleanup_tensor(bits)
-                secure_cleanup_tensor(positions_tensor)
-    finally:
-        secure_cleanup_tensor(flat_pixels_tensor)
+            if payload[:4] == MAGIC or payload[:4] == SPLIT_MAGIC:
+                return payload
+        except Exception:
+            continue
     
     raise ValueError("No hidden data found")
 
