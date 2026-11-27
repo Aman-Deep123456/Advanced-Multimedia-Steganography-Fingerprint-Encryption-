@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, 'io_utils'))
 from steganography import (
     embed_universal, extract_universal, get_file_capacity, detect_file_type,
     split_file, create_split_payload, parse_split_payload,
-    generate_fingerprint, extract_from_audio, extract_from_video, DEVICE
+    generate_fingerprint, extract_from_audio, extract_from_video, DEVICE,
+    embed_in_image_gpu, embed_in_audio, embed_in_video, extract_from_image_gpu
 )
 from crypto import BitcoinStyleCrypto
 
@@ -132,7 +133,12 @@ class CapacityHandler(BaseHandler):
                 if capacity > 0:
                     pct = round((secret_size / capacity) * 100, 2)
                     fit = secret_size <= capacity
-                    split_needed = max(1, (secret_size + capacity - 1) // capacity)
+                    # Account for encryption (+95B), ECC (+32B), and SPLT headers with safe safety margin
+                    effective_size = int(secret_size * 1.05) + 300
+                    split_needed = max(2, (effective_size + capacity - 1) // capacity)
+                    # Add 1 more part if close to boundary for safety
+                    if (effective_size / split_needed) > (capacity * 0.9):
+                        split_needed += 1
                 else:
                     pct = 999.0
                     fit = False
@@ -215,6 +221,23 @@ class EmbedHandler(BaseHandler):
             cap = get_file_capacity(temp_cover.name)
             logs.append(f"Carrier usable capacity: {cap:,} bytes")
 
+            if split_count > 1:
+                sample_chunk = (len(secret_data) + split_count - 1) // split_count + 120
+                if sample_chunk > cap:
+                    min_parts = (len(secret_data) + cap - 1) // cap + 1
+                    os.unlink(temp_cover.name)
+                    return self.write_json({
+                        "success": False,
+                        "error": f"Each part ({sample_chunk/1024:.1f} KB) still exceeds this carrier's capacity ({cap/1024:.1f} KB). Please increase the split slider to at least {min_parts} parts, or use a larger cover image."
+                    }, 400)
+            elif len(secret_data) > cap:
+                min_parts = (len(secret_data) + cap - 1) // cap + 1
+                os.unlink(temp_cover.name)
+                return self.write_json({
+                    "success": False,
+                    "error": f"Secret ({len(secret_data)/1024:.1f} KB) exceeds this single carrier's capacity ({cap/1024:.1f} KB). Please enable 'Multi-Carrier Splitting' with at least {min_parts} parts, or use a larger cover image."
+                }, 400)
+
             # Create session output dir in CACHE_DIR
             session_id = str(uuid.uuid4())
             session_dir = os.path.join(CACHE_DIR, session_id)
@@ -272,19 +295,26 @@ class EmbedHandler(BaseHandler):
                 zip_path = os.path.join(session_dir, zip_filename)
 
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    cov_type = detect_file_type(temp_cover.name)
                     for idx, part_data in enumerate(parts):
                         payload = create_split_payload(part_data, idx, split_count, filename_bytes, fingerprint_bytes)
-                        t_part_payload = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
-                        t_part_payload.write(payload)
-                        t_part_payload.close()
-
                         part_out_name = f"carrier_part_{idx+1}_{secrets.token_hex(6)}{cover_ext}"
                         part_out_path = os.path.join(session_dir, part_out_name)
 
-                        embed_universal(temp_cover.name, t_part_payload.name, part_out_path, fingerprint_bytes=fingerprint_bytes)
+                        if cov_type == 'image':
+                            embed_in_image_gpu(temp_cover.name, payload, part_out_path, bit_position=bit_position, fingerprint_bytes=fingerprint_bytes)
+                        elif cov_type == 'audio':
+                            embed_in_audio(temp_cover.name, payload, part_out_path, fingerprint_bytes=fingerprint_bytes)
+                        elif cov_type == 'video':
+                            embed_in_video(temp_cover.name, payload, part_out_path, fingerprint_bytes=fingerprint_bytes)
+                        else:
+                            t_part_payload = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
+                            t_part_payload.write(payload)
+                            t_part_payload.close()
+                            embed_universal(temp_cover.name, t_part_payload.name, part_out_path, fingerprint_bytes=fingerprint_bytes)
+                            os.unlink(t_part_payload.name)
 
                         zf.write(part_out_path, arcname=part_out_name)
-                        os.unlink(t_part_payload.name)
                         os.unlink(part_out_path)
                         logs.append(f"Embedded Chunk {idx+1}/{split_count} -> {part_out_name}")
 
@@ -475,7 +505,14 @@ class MergeHandler(BaseHandler):
                 ftype = detect_file_type(t_part.name)
                 try:
                     if ftype == 'image':
-                        payload = extract_universal(t_part.name, bit_position='lsb', fingerprint_bytes=fp_bytes_calc)
+                        payload = extract_from_image_gpu(t_part.name, bit_position='lsb', fingerprint_bytes=fp_bytes_calc)
+                        if isinstance(payload, bytes) and payload.startswith(b'STEG'):
+                            offset = 4
+                            f_size = int.from_bytes(payload[offset:offset+8], 'big')
+                            offset += 8
+                            n_len = int.from_bytes(payload[offset:offset+2], 'big')
+                            offset += 2 + n_len
+                            payload = payload[offset:offset+f_size]
                     elif ftype == 'audio':
                         payload = extract_from_audio(t_part.name, fp_bytes_calc)
                     elif ftype == 'video':
