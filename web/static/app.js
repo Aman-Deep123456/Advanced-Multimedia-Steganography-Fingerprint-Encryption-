@@ -262,13 +262,25 @@ document.addEventListener('DOMContentLoaded', () => {
           progressBar.className = 'bg-gradient-to-r from-amber-500 to-rose-500 h-full rounded-full transition-all duration-500';
           percentBadge.className = 'px-2 py-0.5 rounded text-xs font-mono font-bold bg-rose-950 text-rose-400 border border-rose-800';
           alertBox.className = 'mt-3 text-xs font-medium p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300';
-          alertBox.innerHTML = `⚠ Exceeds Single Carrier Capacity (${data.pct}%). Recommended: Check <b>Multi-Carrier Splitting</b> and set parts to <b>${data.split_needed}</b>.`;
+          alertBox.innerHTML = `⚠ Exceeds Single Carrier Capacity (${data.pct}%). Recommended: Multi-Carrier Splitting with at least <b>${data.split_needed} parts</b>. <button type="button" id="btn-apply-split" class="ml-2 px-2 py-0.5 rounded bg-rose-700 hover:bg-rose-600 text-white font-mono text-[11px]">Auto-Set ${data.split_needed} Parts</button>`;
           alertBox.classList.remove('hidden');
 
-          // Auto-suggest split slider
           const splitCheck = document.getElementById('check-split');
           const splitSlider = document.getElementById('input-split-slider');
-          if (!splitCheck.checked) {
+          const splitSliderSection = document.getElementById('split-slider-section');
+
+          const applyBtn = document.getElementById('btn-apply-split');
+          if (applyBtn) {
+            applyBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              splitCheck.checked = true;
+              splitSliderSection.classList.remove('opacity-50', 'pointer-events-none');
+              splitSlider.value = data.split_needed;
+              document.getElementById('split-parts-label').textContent = `${data.split_needed} Parts`;
+            });
+          }
+
+          if (parseInt(splitSlider.value) < data.split_needed) {
             splitSlider.value = data.split_needed;
             document.getElementById('split-parts-label').textContent = `${data.split_needed} Parts`;
           }
